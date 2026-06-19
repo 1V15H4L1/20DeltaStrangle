@@ -1,9 +1,17 @@
+import os
+from datetime import date
+
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
+
+try:
+    import flattrade_fetch as _ft
+except ImportError:
+    _ft = None
 
 st.set_page_config(
     page_title="Strangle Dashboard",
@@ -53,7 +61,7 @@ BLUE   = "#58a6ff"
 PURPLE = "#bc8cff"
 
 def render_table(df):
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, width='stretch', hide_index=True)
 
 _AXIS = dict(
     gridcolor=GRID_COL, zeroline=False, showline=False,
@@ -146,7 +154,7 @@ def load_backtest():
 
     return daily, parent
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def load_live():
     df = pd.read_csv("data/live_trades.csv")
     df['Date'] = pd.to_datetime(df['Date'], dayfirst=True)
@@ -604,14 +612,14 @@ with tab_compare:
         'Metric': ['Days traded', 'Wins', 'Losses', 'Win Rate',
                    'Total P&L', 'Avg/Day', 'Backtest Expected', 'vs Expected'],
         'Live': [
-            live_days, int(live_wins), int(live_days - live_wins),
+            str(live_days), str(int(live_wins)), str(int(live_days - live_wins)),
             f"{live_wr:.1f}%", f"₹{live_total:,.0f}",
             f"₹{live_daily['Day_PL'].mean():,.0f}" if live_days > 0 else '—',
             f"₹{expected:,.0f}",
             f"₹{live_total - expected:,.0f}"
         ],
         'Backtest': [
-            597, 339, 258, '56.8%', '₹2,02,089',
+            '597', '339', '258', '56.8%', '₹2,02,089',
             f"₹{bt_avg_day:,.0f}", '—', '—'
         ]
     }
