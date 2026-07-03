@@ -137,7 +137,9 @@ _MONTH_NUM = {
 _NFO_RE = re.compile(r'^(NIFTY|BANKNIFTY)(\d{2})([A-Z]{3})(\d{2})(C|P)(\d+)$')
 
 # BFO (BSE): SENSEX2661877700CE  → underlying + YY + M[M] + DD + strike + CE/PE
-_BFO_RE = re.compile(r'^(SENSEX|BANKEX)(\d{2})(\d{1,2})(\d{2})(\d+)(CE|PE)$')
+_BFO_NUMERIC_RE = re.compile(r'^(SENSEX|BANKEX)(\d{2})(\d+)(CE|PE)$')
+# BFO alt: SENSEX26JUN77000PE  → underlying + DD + MMM + strike + CE/PE
+_BFO_ALPHA_RE = re.compile(r'^(SENSEX|BANKEX)(\d{2})([A-Z]{3})(\d+)(CE|PE)$')
 
 
 def _parse_symbol(tsym):
@@ -157,14 +159,28 @@ def _parse_symbol(tsym):
         expiry   = f"{dd}-{_MONTH_ABB[mon]}-20{yy}"
         return underlying, expiry, int(strike_str), opt_type
 
-    # Try BFO format
-    m = _BFO_RE.match(t)
+    # Try BFO numeric date format (e.g. SENSEX2670276200PE → 02-Jul-2026 PE 76200)
+    m = _BFO_NUMERIC_RE.match(t)
     if m:
-        underlying, yy, month_num, dd, strike_str, opt_type = m.groups()
-        mon_name = _MONTH_NUM.get(month_num)
-        if not mon_name:
+        underlying, yy, mid, opt_type = m.groups()
+        for mlen in (1, 2):
+            month_num = mid[:mlen]
+            mon_name = _MONTH_NUM.get(month_num)
+            if not mon_name:
+                continue
+            dd = mid[mlen:mlen + 2]
+            strike_str = mid[mlen + 2:]
+            if len(dd) == 2 and dd.isdigit() and strike_str.isdigit():
+                expiry = f"{int(dd):02d}-{mon_name}-20{yy}"
+                return underlying, expiry, int(strike_str), opt_type
+
+    # Try BFO month-abbreviation format (e.g. SENSEX26JUN77000PE)
+    m = _BFO_ALPHA_RE.match(t)
+    if m:
+        underlying, dd, mon, strike_str, opt_type = m.groups()
+        if mon not in _MONTH_ABB:
             return None
-        expiry = f"{dd}-{mon_name}-20{yy}"
+        expiry = f"{dd}-{_MONTH_ABB[mon]}-2026"
         return underlying, expiry, int(strike_str), opt_type
 
     return None
@@ -351,15 +367,14 @@ def get_vix_data(trade_date):
         if df.empty:
             return None
 
-        r     = df.iloc[0]
-        open_ = float(r['Open'])
-        close = float(r['Close'])
+        open_ = float(df['Open'].to_numpy().ravel()[0])
+        close = float(df['Close'].to_numpy().ravel()[0])
         chg   = round((close - open_) / open_ * 100, 2) if open_ else 0
 
         return {
             'VIX_Open':       round(open_, 4),
-            'VIX_High':       round(float(r['High']), 4),
-            'VIX_Low':        round(float(r['Low']),  4),
+            'VIX_High':       round(float(df['High'].to_numpy().ravel()[0]), 4),
+            'VIX_Low':        round(float(df['Low'].to_numpy().ravel()[0]),  4),
             'VIX_Close':      round(close, 4),
             'VIX_Change_Pct': chg,
         }
