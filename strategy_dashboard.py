@@ -58,6 +58,12 @@ def render_strategy_tabs(
     live_wins = live_daily["Win"].sum() if live_days else 0
     live_total = live_daily["Day_PL"].sum() if live_days else 0
     live_wr = live_wins / live_days * 100 if live_days else 0
+    live_charges = (
+        float(pd.to_numeric(live["Charges"], errors="coerce").fillna(0).sum())
+        if live_days and not live.empty and "Charges" in live.columns
+        else 0.0
+    )
+    live_gross = live_total + live_charges if live_charges else live_total
     bt_avg_day = bt["PL"].mean()
     expected = bt_avg_day * live_days if live_days else 0
 
@@ -284,17 +290,32 @@ def render_strategy_tabs(
 
     # ── LIVE ──────────────────────────────────────────────────────────────────
     with tab_live:
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric(
             "Live Days", str(live_days),
             f"since {live_daily['Date'].min().strftime('%d %b %Y')}" if live_days > 0 else "—",
         )
         c2.metric(
-            "Live P&L", f"₹{live_total:,.0f}",
+            "Live P&L (net)", f"₹{live_total:,.0f}",
             f"{'↑' if live_total >= 0 else '↓'} vs expected ₹{expected:,.0f}" if live_days else "—",
         )
-        c3.metric("Win Rate", f"{live_wr:.1f}%", f"{live_wins}W / {live_days - live_wins}L" if live_days else "—")
-        c4.metric("Backtest Avg/Day", f"₹{bt_avg_day:,.0f}", "per day expected")
+        c3.metric(
+            "Charges",
+            f"₹{live_charges:,.0f}" if live_days else "—",
+            f"gross ₹{live_gross:,.0f}" if live_days and live_charges else "Flattrade statutory",
+        )
+        c4.metric("Win Rate", f"{live_wr:.1f}%", f"{live_wins}W / {live_days - live_wins}L" if live_days else "—")
+        live_avg_day = live_total / live_days if live_days else 0
+        gap = live_avg_day - bt_avg_day if live_days else 0
+        c5.metric(
+            "Avg/Day",
+            f"₹{live_avg_day:,.0f}" if live_days else "—",
+            (
+                f"live · BT ₹{bt_avg_day:,.0f} ({'↑' if gap >= 0 else '↓'}₹{abs(gap):,.0f})"
+                if live_days
+                else "—"
+            ),
+        )
 
         st.markdown("<br>", unsafe_allow_html=True)
 

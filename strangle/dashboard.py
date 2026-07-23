@@ -8,15 +8,17 @@ import pandas as pd
 import streamlit as st
 
 from portfolio.analysis import load_config
+from portfolio.charges import apply_charges_to_live
 from strategy_dashboard import render_strategy_tabs
 from strangle.loader import load_strangle_backtest
 from theme import LEGEND, PLOT_LAYOUT, page_header, render_table
 
 LIVE_CSV = Path("data/live_trades.csv")
+_CACHE_VER = "live-charges-v1"
 
 
 @st.cache_data
-def _load_strangle():
+def _load_strangle(_ver: str = _CACHE_VER):
     daily, parent = load_strangle_backtest()
     cfg = load_config()
     cap = cfg.get("capital_per_strategy", 550_000)
@@ -25,12 +27,13 @@ def _load_strangle():
 
 
 @st.cache_data(ttl=60)
-def _load_live_strangle():
+def _load_live_strangle(_ver: str = _CACHE_VER):
     if not LIVE_CSV.exists():
         return pd.DataFrame()
     df = pd.read_csv(LIVE_CSV)
     df["Date"] = pd.to_datetime(df["Date"], dayfirst=True)
-    return df
+    cfg = load_config()
+    return apply_charges_to_live(df, cfg.get("charges"))
 
 
 def render_strangle_dashboard():

@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from portfolio.analysis import load_config
+from portfolio.charges import apply_charges_to_live
 from strategy_dashboard import render_strategy_tabs
 from theme import LEGEND as _LEGEND, PLOT_LAYOUT, page_header, render_table as _render_table
 from theta.labels import DAY_CAT_ORDER, remap_legacy_labels
@@ -15,7 +16,7 @@ from theta.loader import load_theta_backtest
 
 LIVE_CSV = Path("data/live_trades_theta.csv")
 
-_CACHE_VER = "rs50-v1"  # bump to invalidate Streamlit cache after label changes
+_CACHE_VER = "rs50-charges-v1"  # bump to invalidate Streamlit cache after label/charge changes
 
 
 @st.cache_data
@@ -38,7 +39,8 @@ def _load_live_theta(_ver: str = _CACHE_VER):
     for col in ("Exit_Reason", "Instr_Category", "Day_Category"):
         if col in df.columns:
             df[col] = remap_legacy_labels(df[col])
-    return df
+    cfg = load_config()
+    return apply_charges_to_live(df, cfg.get("charges"))
 
 
 def render_theta_dashboard():
