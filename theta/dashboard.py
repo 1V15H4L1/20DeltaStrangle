@@ -10,14 +10,19 @@ import streamlit as st
 from portfolio.analysis import load_config
 from strategy_dashboard import render_strategy_tabs
 from theme import LEGEND as _LEGEND, PLOT_LAYOUT, page_header, render_table as _render_table
+from theta.labels import DAY_CAT_ORDER, remap_legacy_labels
 from theta.loader import load_theta_backtest
 
 LIVE_CSV = Path("data/live_trades_theta.csv")
 
+_CACHE_VER = "rs50-v1"  # bump to invalidate Streamlit cache after label changes
+
 
 @st.cache_data
-def _load_theta():
+def _load_theta(_ver: str = _CACHE_VER):
     daily, parent = load_theta_backtest()
+    daily = daily.copy()
+    daily["Day_Cat"] = remap_legacy_labels(daily["Day_Cat"])
     cfg = load_config()
     cap = cfg.get("capital_per_strategy", 550_000)
     s = cfg["strategies"]["theta_shifting"]
@@ -25,11 +30,14 @@ def _load_theta():
 
 
 @st.cache_data(ttl=60)
-def _load_live_theta():
+def _load_live_theta(_ver: str = _CACHE_VER):
     if not LIVE_CSV.exists():
         return pd.DataFrame()
     df = pd.read_csv(LIVE_CSV)
     df["Date"] = pd.to_datetime(df["Date"], dayfirst=True)
+    for col in ("Exit_Reason", "Instr_Category", "Day_Category"):
+        if col in df.columns:
+            df[col] = remap_legacy_labels(df[col])
     return df
 
 
@@ -65,7 +73,11 @@ def render_theta_dashboard():
         render_table=_render_table,
         expiry_days={"Thursday": "🟡 SENSEX"},
         dow_caption="Thursday = SENSEX weekly expiry  |  Day categories = 9:45 vs 11:45 entry slots",
-        day_cat_caption="Categories use strangle labels: 9:45 slot = first leg · 11:45 slot = second leg (50% SL / BE trail per straddle)",
+        day_cat_caption=(
+            "Categories: 9:45 slot = first · 11:45 slot = second "
+            "(₹50 fixed leg SL / BE trail per straddle)"
+        ),
+        day_cat_order=DAY_CAT_ORDER,
         live_log_columns=[
             "Date", "Index", "Type", "Strike", "Entry_Price", "Entry_Time",
             "Exit_Price", "Exit_Time", "Exit_Reason", "PL", "Instr_Category", "Day_Category",

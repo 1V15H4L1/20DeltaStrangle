@@ -6,6 +6,7 @@ import pandas as pd
 
 from portfolio.algotest_loader import load_algotest_csv
 from portfolio.analysis import load_config
+from theta.labels import day_category as _day_category_from_slots
 
 SLOT_945 = "9:45"
 SLOT_1145 = "11:45"
@@ -68,20 +69,15 @@ def load_theta_backtest():
     wide["S_SL"] = wide["S_SL"].fillna(0).astype(int)
 
     def day_cat(r):
-        n, s = r["N_SL"], r["S_SL"]
-        if n == 0 and s == 0:
-            return "Both Clean"
-        if (n == 1 and s == 0) or (n == 0 and s == 1):
-            return "1 Instr: 50% SL only"
-        if n == 1 and s == 1:
-            return "Both: 50% SL only"
-        if (n == 2 and s == 0) or (n == 0 and s == 2):
-            return "1 Instr: 50%+BE hit"
-        if (n == 2 and s == 1) or (n == 1 and s == 2):
-            return "Mixed: 50%+BE + 50%SL"
-        if n == 2 and s == 2:
-            return "Both: 50%+BE hit"
-        return "Other"
+        # Map stopped-leg counts to slot categories, then to day label (₹50 SL).
+        def slot_cat(n):
+            if n == 0:
+                return "Both: EOD"
+            if n == 1:
+                return "₹50 SL only"
+            return "₹50 SL + BE hit"
+
+        return _day_category_from_slots(slot_cat(r["N_SL"]), slot_cat(r["S_SL"]))
 
     wide["Day_Cat"] = wide.apply(day_cat, axis=1)
     daily = daily.merge(wide[["Date", "Day_Cat"]], on="Date", how="left")

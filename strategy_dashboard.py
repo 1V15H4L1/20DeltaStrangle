@@ -20,6 +20,7 @@ def render_strategy_tabs(
     render_table,
     dow_caption: str = "Tuesday = NIFTY expiry  |  Thursday = SENSEX expiry",
     day_cat_caption: str | None = None,
+    day_cat_order: list[str] | None = None,
     live_log_columns: list[str] | None = None,
     live_empty_hint: str | None = None,
     expiry_days: dict[str, str] | None = None,
@@ -31,6 +32,8 @@ def render_strategy_tabs(
         and the Expiry column (e.g. {"Tuesday": "🟡 NIFTY", "Thursday": "🟡 SENSEX"}).
         Defaults to Thursday=SENSEX only.
     dte_map: {weekday: {"NIFTY DTE": int, "SENSEX DTE": int}} for the DOW table.
+    day_cat_order: category labels for the Day Category breakdown (strangle uses
+        50% SL wording; theta uses ₹50 SL wording).
     """
     if expiry_days is None:
         expiry_days = {"Thursday": "🟡 SENSEX"}
@@ -42,6 +45,11 @@ def render_strategy_tabs(
             "Thursday": {"NIFTY DTE": 5, "SENSEX DTE": 0},
             "Friday": {"NIFTY DTE": 4, "SENSEX DTE": 6},
         }
+    if day_cat_order is None:
+        day_cat_order = [
+            "Both Clean", "1 Instr: 50% SL only", "Both: 50% SL only",
+            "1 Instr: 50%+BE hit", "Mixed: 50%+BE + 50%SL", "Both: 50%+BE hit",
+        ]
     tab_bt, tab_live, tab_compare = st.tabs(
         ["📊 Backtest", "🟢 Live Trading", "🔍 Backtest vs Live"]
     )
@@ -138,13 +146,9 @@ def render_strategy_tabs(
         st.markdown("#### Day Category Breakdown")
         if day_cat_caption:
             st.caption(day_cat_caption)
-        cat_order = [
-            "Both Clean", "1 Instr: 50% SL only", "Both: 50% SL only",
-            "1 Instr: 50%+BE hit", "Mixed: 50%+BE + 50%SL", "Both: 50%+BE hit",
-        ]
         cat_colors = [GREEN, "#2ea043", GOLD, BLUE, "#ff7b54", RED]
         rows = []
-        for cat in cat_order:
+        for cat in day_cat_order:
             d = bt[bt["Day_Cat"] == cat]
             if d.empty:
                 continue
@@ -389,12 +393,22 @@ def render_strategy_tabs(
             Days=("PL", "count"), Total_PL=("PL", "sum"), Avg_PL=("PL", "mean"),
         ).reset_index()
         bt_cats["Win_Rate"] = bt.groupby("Day_Cat")["Win"].mean().values * 100
+        if day_cat_order:
+            bt_cats["_ord"] = bt_cats["Day_Cat"].apply(
+                lambda c: day_cat_order.index(c) if c in day_cat_order else 99
+            )
+            bt_cats = bt_cats.sort_values("_ord").drop(columns="_ord")
 
         if live_days > 0:
             live_cat_grp = live_daily.groupby("Day_Category").agg(
                 Days=("Day_PL", "count"), Total_PL=("Day_PL", "sum"), Avg_PL=("Day_PL", "mean"),
             ).reset_index().rename(columns={"Day_Category": "Day_Cat"})
             live_cat_grp["Win_Rate"] = live_daily.groupby("Day_Category")["Win"].mean().values * 100
+            if day_cat_order:
+                live_cat_grp["_ord"] = live_cat_grp["Day_Cat"].apply(
+                    lambda c: day_cat_order.index(c) if c in day_cat_order else 99
+                )
+                live_cat_grp = live_cat_grp.sort_values("_ord").drop(columns="_ord")
             col1, col2 = st.columns(2)
             with col1:
                 st.markdown("**Backtest**")
